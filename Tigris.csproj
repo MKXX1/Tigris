@@ -1,0 +1,66 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>warnings</Nullable>
+    <UseWindowsForms>True</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <StartupObject></StartupObject>
+    <ApplicationIcon>ICON.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="CUE4Parse-master\**" />
+    <Compile Remove="CUE4Parse\**" />
+    <Compile Remove="Font\**" />
+    <Compile Remove="ImGUI\**" />
+    <EmbeddedResource Remove="CUE4Parse-master\**" />
+    <EmbeddedResource Remove="CUE4Parse\**" />
+    <EmbeddedResource Remove="Font\**" />
+    <EmbeddedResource Remove="ImGUI\**" />
+    <None Remove="CUE4Parse-master\**" />
+    <None Remove="CUE4Parse\**" />
+    <None Remove="Font\**" />
+    <None Remove="ImGUI\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="arial_unicode_ms.otf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="ICON.ico" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Shaders/GLSL/imgui-vertex.glsl" LogicalName="imgui-vertex.glsl" />
+		<EmbeddedResource Include="Shaders/GLSL/imgui-frag.glsl" LogicalName="imgui-frag.glsl" />
+		<EmbeddedResource Include="Shaders/HLSL/imgui-vertex.hlsl.bytes" LogicalName="imgui-vertex.hlsl.bytes" />
+		<EmbeddedResource Include="Shaders/HLSL/imgui-frag.hlsl.bytes" LogicalName="imgui-frag.hlsl.bytes" />
+		<EmbeddedResource Include="Shaders/SPIR-V/imgui-vertex.spv" LogicalName="imgui-vertex.spv" />
+		<EmbeddedResource Include="Shaders/SPIR-V/imgui-frag.spv" LogicalName="imgui-frag.spv" />
+		<EmbeddedResource Include="Shaders/Metal/imgui-vertex.metallib" LogicalName="imgui-vertex.metallib" />
+		<EmbeddedResource Include="Shaders/Metal/imgui-frag.metallib" LogicalName="imgui-frag.metallib" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CUE4Parse" Version="1.2.2" />
+    <PackageReference Include="CUE4Parse-Conversion" Version="1.2.1" />
+    <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="Oodle.NET" Version="2.1.0" />
+    <PackageReference Include="Veldrid" Version="4.9.0" />
+    <PackageReference Include="Veldrid.StartupUtilities" Version="4.9.0" />
+  </ItemGroup>
+
+</Project>
