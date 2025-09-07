@@ -36,6 +36,7 @@ Video Tutorial later.
 
 ## Troubleshooting
 if the sound does not play, try deleting the mod .pak files
+
 If program crashes when trying to play sound and the wrong font is displayed, then move the "utils" folder to the folder with the executable file
 
 ## Licenses
