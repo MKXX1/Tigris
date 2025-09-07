@@ -8,7 +8,7 @@
     <UseWindowsForms>True</UseWindowsForms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <StartupObject></StartupObject>
-    <ApplicationIcon>ICON.ico</ApplicationIcon>
+    <ApplicationIcon>Resources\ICON.ico</ApplicationIcon>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -23,14 +23,17 @@
     <Compile Remove="CUE4Parse-master\**" />
     <Compile Remove="CUE4Parse\**" />
     <Compile Remove="Font\**" />
+    <Compile Remove="Github\**" />
     <Compile Remove="ImGUI\**" />
     <EmbeddedResource Remove="CUE4Parse-master\**" />
     <EmbeddedResource Remove="CUE4Parse\**" />
     <EmbeddedResource Remove="Font\**" />
+    <EmbeddedResource Remove="Github\**" />
     <EmbeddedResource Remove="ImGUI\**" />
     <None Remove="CUE4Parse-master\**" />
     <None Remove="CUE4Parse\**" />
     <None Remove="Font\**" />
+    <None Remove="Github\**" />
     <None Remove="ImGUI\**" />
   </ItemGroup>
 
@@ -39,7 +42,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="ICON.ico" />
+    <Content Include="Resources\ICON.ico" />
   </ItemGroup>
 
 	<ItemGroup>
@@ -61,6 +64,63 @@
     <PackageReference Include="Oodle.NET" Version="2.1.0" />
     <PackageReference Include="Veldrid" Version="4.9.0" />
     <PackageReference Include="Veldrid.StartupUtilities" Version="4.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Resource.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resource.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Resource.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resource.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="utils\repak\repak.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="utils\vgm\avcodec-vgmstream-59.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="utils\vgm\avformat-vgmstream-59.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="utils\vgm\avutil-vgmstream-57.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="utils\vgm\libatrac9.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="utils\vgm\libcelt-0061.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="utils\vgm\libcelt-0110.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="utils\vgm\libg719_decode.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="utils\vgm\libmpg123-0.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="utils\vgm\libspeex-1.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="utils\vgm\libvorbis.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="utils\vgm\swresample-vgmstream-4.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="utils\vgm\vgmstream-cli.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

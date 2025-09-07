@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -16,9 +18,39 @@ namespace Tigris
             ImGui.CreateContext();
             var io = ImGui.GetIO();
             io.Fonts.Clear();
+            byte[] fontData = Resource.arial_unicode_ms;
+            float fontSize = 18.0f;
+            unsafe
+            {
+                fixed (byte* fontPtr = fontData)
+                {
+                    ImFontConfigPtr config = new ImFontConfigPtr(ImGuiNative.ImFontConfig_ImFontConfig());
+                    config.FontDataOwnedByAtlas = false;
+                    ImFontPtr font = io.Fonts.AddFontFromMemoryTTF((IntPtr)fontPtr, fontData.Length, fontSize, config);
+                    config.MergeMode = true;
+                    font = io.Fonts.AddFontFromMemoryTTF((IntPtr)fontPtr, fontData.Length, fontSize, config, io.Fonts.GetGlyphRangesCyrillic());
+                    font = io.Fonts.AddFontFromMemoryTTF((IntPtr)fontPtr, fontData.Length, fontSize, config, io.Fonts.GetGlyphRangesJapanese());
+                    font = io.Fonts.AddFontFromMemoryTTF((IntPtr)fontPtr, fontData.Length, fontSize, config, io.Fonts.GetGlyphRangesChineseFull());
+                    font = io.Fonts.AddFontFromMemoryTTF((IntPtr)fontPtr, fontData.Length, fontSize, config, io.Fonts.GetGlyphRangesChineseSimplifiedCommon());
+                    font = io.Fonts.AddFontFromMemoryTTF((IntPtr)fontPtr, fontData.Length, fontSize, config, io.Fonts.GetGlyphRangesGreek());
+                    font = io.Fonts.AddFontFromMemoryTTF((IntPtr)fontPtr, fontData.Length, fontSize, config, io.Fonts.GetGlyphRangesKorean());
+                    font = io.Fonts.AddFontFromMemoryTTF((IntPtr)fontPtr, fontData.Length, fontSize, config, io.Fonts.GetGlyphRangesDefault());
+                    font = io.Fonts.AddFontFromMemoryTTF((IntPtr)fontPtr, fontData.Length, fontSize, config, io.Fonts.GetGlyphRangesThai());
+                    font = io.Fonts.AddFontFromMemoryTTF((IntPtr)fontPtr, fontData.Length, fontSize, config, io.Fonts.GetGlyphRangesVietnamese());
+                    config.Destroy();
+                }
+            }
+            io.Fonts.Build();
+        }
+        /*internal void LoadFont()
+        {
+            ImGui.CreateContext();
+            var io = ImGui.GetIO();
+            io.Fonts.Clear();
 
 
             //    string fontPath = "C:/Windows/Fonts/arial.ttf";
+            byte[] fontData = Resource1.arial_unicode_ms;
             string fontPath = Path.Combine(AppContext.BaseDirectory, "utils", "font", "arial_unicode.otf");
             if (File.Exists(fontPath))
             {
@@ -28,17 +60,18 @@ namespace Tigris
                     ImFontConfigPtr config = new ImFontConfigPtr(ImGuiNative.ImFontConfig_ImFontConfig());
                     ImFontGlyphRangesBuilderPtr builder = new ImFontGlyphRangesBuilderPtr(ImGuiNative.ImFontGlyphRangesBuilder_ImFontGlyphRangesBuilder());
                     builder.BuildRanges(out ImVector ranges);
-                    ImFontPtr font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config);
-                    config.MergeMode = true;
-                    font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesCyrillic());
-                    font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesJapanese());
-                    font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesChineseFull());
-                    font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesChineseSimplifiedCommon());
-                    font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesGreek());
-                    font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesKorean());
-                    font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesDefault());
-                    font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesThai());
-                    font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesVietnamese());
+                    //ImFontPtr font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config);
+                    ImFontPtr font = io.Fonts.AddFontFromFileTTF;
+                    //config.MergeMode = true;
+                    //font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesCyrillic());
+                    //font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesJapanese());
+                    //font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesChineseFull());
+                    //font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesChineseSimplifiedCommon());
+                    //font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesGreek());
+                    //font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesKorean());
+                    //font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesDefault());
+                    //font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesThai());
+                    //font = io.Fonts.AddFontFromFileTTF(fontPath, fontSize, config, io.Fonts.GetGlyphRangesVietnamese());
                 }
             }
             else
@@ -48,7 +81,7 @@ namespace Tigris
             }
 
             io.Fonts.Build();
-        }
+        } */
         internal void StyleLight()
         {
             var style = ImGui.GetStyle();
