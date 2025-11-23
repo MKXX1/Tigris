@@ -17,6 +17,10 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
+using System.Reflection;
+using System.Numerics;
+using CUE4Parse;
+using CUE4Parse.UE4.Objects.Core.i18N;
 
 namespace Tigris
 {
@@ -192,6 +196,7 @@ namespace Tigris
         }
         internal void UpdateFilteredSounds(string language)
         {
+
             if (searchQuery != lastSearchQuery || language != lastLanguageTab)
             {
                 filteredSoundsCache = soundItems
@@ -228,100 +233,145 @@ namespace Tigris
 
             ImGui.BeginChild("SoundList", new System.Numerics.Vector2(0, 0));
 
-            ImGuiListClipperPtr clipper;
-            unsafe
+            if (itemsCount == 0)
             {
-                clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
+                ImGui.Text("No sounds found matching your search");
+                ImGui.EndChild();
+                return;
             }
 
-            clipper.Begin(itemsCount, 0f);
-            if (ImGui.BeginTable("SoundTable", 6, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY))
+            var style = ImGui.GetStyle();
+            float lineH = ImGui.GetTextLineHeightWithSpacing();
+            int maxSubtitleLines = 2;
+            float rowHeight = lineH * maxSubtitleLines + style.CellPadding.Y * 2f;
+
+            // --- таблица ---
+            if (ImGui.BeginTable("SoundTable", 6,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoSavedSettings))
             {
                 ImGui.TableSetupColumn("Play", ImGuiTableColumnFlags.WidthFixed, 60);
-                ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.WidthFixed, 120);
+                ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.WidthFixed, 80);
                 ImGui.TableSetupColumn("Short Name", ImGuiTableColumnFlags.WidthStretch);
                 ImGui.TableSetupColumn("Size", ImGuiTableColumnFlags.WidthFixed, 80);
                 ImGui.TableSetupColumn("Language", ImGuiTableColumnFlags.WidthFixed, 70);
                 ImGui.TableSetupColumn("Subtitle", ImGuiTableColumnFlags.WidthStretch);
                 ImGui.TableHeadersRow();
-                while (clipper.Step())
+                unsafe
                 {
-                    for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+                    var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
+                    clipper.Begin(itemsCount, rowHeight);
+                    while (clipper.Step())
                     {
-                        if (i >= itemsCount) break;
-
-                        var sound = filteredSoundsCache[i];
-                        string uniqueId = $"{language}_{sound.DisplayName}_{i}";
-                        string soundId = Path.GetFileNameWithoutExtension(sound.FilePath);
-                        ImGui.TableNextRow();
-
-
-                        ImGui.TableSetColumnIndex(0);
-                        bool isPlaying = playingSounds.ContainsKey(sound.DisplayName);
-                        if (ImGui.Button($"{(isPlaying ? "Stop" : "Play")}##btn_{uniqueId}"))
+                        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
                         {
-                            if (isPlaying) StopSound(sound.DisplayName);
-                            else Task.Run(() => PlaySound(sound.FilePath, sound.DisplayName));
-                        }
+                            var sound = filteredSoundsCache[i];
+                            string uniqueId = $"{language}_{sound.DisplayName}_{i}";
+                            string soundId = Path.GetFileNameWithoutExtension(sound.FilePath);
+
+                            ImGui.TableNextRow(ImGuiTableRowFlags.None, rowHeight);
 
 
-
-                        ImGui.TableSetColumnIndex(1);
-                        ImGui.Text(soundId);
-                        if (ImGui.BeginPopupContextItem($"id_ctx_{soundId}"))
-                        {
-                            if (ImGui.MenuItem("Copy ID"))
+                            ImGui.TableSetColumnIndex(0);
+                            bool isPlaying = playingSounds.ContainsKey(sound.DisplayName);
+                            if (ImGui.Button($"{(isPlaying ? "Stop" : "Play")}##btn_{uniqueId}"))
                             {
-                                ImGui.SetClipboardText(soundId);
+                                if (isPlaying) StopSound(sound.DisplayName);
+                                else Task.Run(() => PlaySound(sound.FilePath, sound.DisplayName));
                             }
-                            ImGui.EndPopup();
-                        }
 
-                        ImGui.TableSetColumnIndex(2);
-                        bool selected = sound.Selected;
-                        if (ImGui.Checkbox($"##chk_{uniqueId}", ref selected))
-                            sound.Selected = selected;
-                        ImGui.SameLine();
-                        ImGui.Text(sound.DisplayName);
-                        if (ImGui.BeginPopupContextItem($"id_ctx_{sound.DisplayName}"))
-                        {
-                            if (ImGui.MenuItem("Copy Short Name"))
+                            ImGui.TableSetColumnIndex(1);
+                            ImGui.Text(soundId);
+                            if (ImGui.BeginPopupContextItem($"id_ctx_{soundId}"))
                             {
-                                ImGui.SetClipboardText(sound.DisplayName);
+                                if (ImGui.MenuItem("Copy ID"))
+                                    ImGui.SetClipboardText(soundId);
+                                ImGui.EndPopup();
                             }
-                            ImGui.EndPopup();
-                        }
 
-
-                        ImGui.TableSetColumnIndex(3);
-                        ImGui.Text(sound.FormattedSize);
-
-                        ImGui.TableSetColumnIndex(4);
-                        ImGui.Text(sound.Language);
-
-                        ImGui.TableSetColumnIndex(5);
-                        if (sound.Subtitles.TryGetValue(currentSubtitleLanguage, out var subtitle))
-                            ImGui.TextWrapped(subtitle);
-                        else
-                            ImGui.TextWrapped("");
-                        if (ImGui.BeginPopupContextItem($"id_ctx_{subtitle}"))
-                        {
-                            if (ImGui.MenuItem("Copy Subtitle"))
+                            ImGui.TableSetColumnIndex(2);
+                            bool selected = sound.Selected;
+                            if (ImGui.Checkbox($"##chk_{uniqueId}", ref selected))
+                                sound.Selected = selected;
+                            ImGui.SameLine();
+                            ImGui.Text(sound.DisplayName);
+                            if (ImGui.BeginPopupContextItem($"id_ctx_{sound.DisplayName}"))
                             {
-                                ImGui.SetClipboardText(subtitle);
+                                if (ImGui.MenuItem("Copy Short Name"))
+                                    ImGui.SetClipboardText(sound.DisplayName);
+                                ImGui.EndPopup();
                             }
-                            ImGui.EndPopup();
+
+                            ImGui.TableSetColumnIndex(3);
+                            ImGui.Text(sound.FormattedSize);
+
+                            ImGui.TableSetColumnIndex(4);
+                            ImGui.Text(sound.Language);
+
+                            ImGui.TableSetColumnIndex(5);
+                            if (sound.Subtitles.TryGetValue(currentSubtitleLanguage, out var subtitle) && !string.IsNullOrEmpty(subtitle))
+                            {
+                                float wrapWidth = ImGui.GetColumnWidth();
+                                var size = ImGui.CalcTextSize(subtitle, false, wrapWidth);
+
+                                if (size.Y <= lineH * maxSubtitleLines)
+                                {
+                                    ImGui.TextWrapped(subtitle);
+                                }
+                                else
+                                {
+                                    string shown = subtitle;
+                                    int cutPos = subtitle.Length;
+                                    while (cutPos > 0)
+                                    {
+                                        string probe = subtitle.Substring(0, cutPos) + "…";
+                                        var s = ImGui.CalcTextSize(probe, false, wrapWidth);
+                                        if (s.Y <= lineH * maxSubtitleLines)
+                                        {
+                                            shown = probe;
+                                            break;
+                                        }
+                                        cutPos -= 10;
+                                    }
+                                    ImGui.TextWrapped(shown);
+
+                                    // полный текст в тултипе
+                                    if (ImGui.IsItemHovered())
+                                    {
+                                        ImGui.BeginTooltip();
+                                        ImGui.PushTextWrapPos(ImGui.GetFontSize() * 40);
+                                        ImGui.TextUnformatted(subtitle);
+                                        ImGui.PopTextWrapPos();
+                                        ImGui.EndTooltip();
+                                    }
+
+
+                                }
+                            }
+                            else
+                            {
+                                ImGui.Text("");
+                            }
+                            if (ImGui.BeginPopupContextItem($"id_ctx_{subtitle}"))
+                            {
+                                if (ImGui.MenuItem("Copy Subtitle"))
+                                {
+                                    ImGui.SetClipboardText(subtitle);
+                                }
+                                ImGui.EndPopup();
+                            }
                         }
                     }
+
+                    clipper.End();
+                    ImGuiNative.ImGuiListClipper_destroy(clipper.NativePtr);
                 }
 
                 ImGui.EndTable();
             }
 
-            clipper.End();
             ImGui.EndChild();
         }
-        
+
         internal void ExportSelected(ExportType exportType, ExportNameType nameType)
         {
             foreach (var sound in soundItems.Where(s => s.Selected))
@@ -686,25 +736,26 @@ namespace Tigris
 
                     bool needExport = true;
 
+                    //    f.TryCreateReader(out var archive);
                     if (File.Exists(targetFile))
                     {
-                        f.TryCreateReader(out var archive);
+                        var archive = f.CreateReader();
                         var locres = new FTextLocalizationResource(archive);
-                        var locJson = JsonConvert.SerializeObject(locres, Newtonsoft.Json.Formatting.Indented);
+                        var locJson = JsonConvert.SerializeObject(locres, Formatting.Indented);
                         var newHash = Convert.ToBase64String(System.Security.Cryptography.SHA1.Create()
                             .ComputeHash(Encoding.UTF8.GetBytes(locJson)));
                         var oldHash = Convert.ToBase64String(System.Security.Cryptography.SHA1.Create()
                             .ComputeHash(File.ReadAllBytes(targetFile)));
-
+                    
                         if (newHash == oldHash)
                             needExport = false;
                     }
-
+                    
                     if (needExport)
                     {
-                        f.TryCreateReader(out var archive);
+                        var archive = f.CreateReader();
                         var locres = new FTextLocalizationResource(archive);
-                        var locJson = JsonConvert.SerializeObject(locres, Newtonsoft.Json.Formatting.Indented);
+                        var locJson = JsonConvert.SerializeObject(locres, Formatting.Indented);
                         File.WriteAllText(targetFile, locJson);
                         Console.WriteLine($"Exported {langFolder}/{fileName}");
                     }
@@ -834,7 +885,7 @@ namespace Tigris
                     process.Dispose();
                 }
             }
-        }
+        } 
         public string GetPaksPath(string selectedPath)
         {
             if (string.IsNullOrEmpty(selectedPath) || !Directory.Exists(selectedPath))

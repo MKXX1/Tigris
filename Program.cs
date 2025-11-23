@@ -16,6 +16,10 @@ using Veldrid;
 using Veldrid.Sdl2;
 using Veldrid.StartupUtilities;
 using static Tigris.Func;
+using CUE4Parse.MappingsProvider;
+using CUE4Parse.UE4.Pak;
+using SharpGLTF.Collections;
+using System.Reflection.Metadata;
 
 namespace Tigris
 {
@@ -145,9 +149,11 @@ namespace Tigris
                             if (paksPath != null)
                             {
                                 _func.gameDirectory = paksPath;
+                                string SkornemPak = _func.gameDirectory + "/" + "OPP-WindowsClient.pak";
                                 try
                                 {
-                                    _func.provider = new DefaultFileProvider(_func.gameDirectory, SearchOption.TopDirectoryOnly, true, new VersionContainer(EGame.GAME_OutlastTrials));
+                                    _func.provider = new DefaultFileProvider(SkornemPak, SearchOption.TopDirectoryOnly, true, new VersionContainer(EGame.GAME_OutlastTrials));
+                                 //   _func.provider.MappingsContainer = new FileUsmapTypeMappingsProvider("Z:\\Dumper-7\\4.27.1-197800+release-4-1-OPP\\Mappings\\4.27.1-197800+release-4-1-OPP.usmap");
                                     _func.provider.Initialize();
                                     _func.provider.SubmitKey(new FGuid(), new FAesKey(_aesKey));
                                     string dllPath = Path.Combine(AppContext.BaseDirectory, "oo2core_9_win64.dll");
@@ -159,8 +165,8 @@ namespace Tigris
                                    
                                     Console.WriteLine($"Provider initialized: {_func.gameDirectory}");
 
-                                    _func.InitLocres();
-                                    _func.BuildSoundMapAndList();
+                                   _func.InitLocres();
+                                   _func.BuildSoundMapAndList();
                                 }
                                 catch (Exception ex)
                                 {
@@ -184,7 +190,6 @@ namespace Tigris
                 }
 
                 ImGui.SameLine();
-
                 ImGui.SetNextItemWidth(170f);
                 if (ImGui.BeginCombo("Export Format", exportOptions[currentExportType]))
                 {
