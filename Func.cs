@@ -919,9 +919,9 @@ namespace Tigris
                 }
 
                 string[] possiblePaksPaths = {
-                Path.Combine(currentDir, "Content", "Paks"),
-                Path.Combine(currentDir, "OPP", "Paks"),
-                Path.Combine(currentDir, "The Outlast Trials", "OPP", "Content", "Paks")
+                Path.Combine(currentDir, "Content", "Paks", "OPP-WindowsClient.pak"),
+                Path.Combine(currentDir, "OPP", "Paks", "OPP-WindowsClient.pak"),
+                Path.Combine(currentDir, "The Outlast Trials", "OPP", "Content", "Paks", "OPP-WindowsClient.pak")
             };
 
                 foreach (var path in possiblePaksPaths)
