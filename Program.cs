@@ -20,6 +20,7 @@ using CUE4Parse.MappingsProvider;
 using CUE4Parse.UE4.Pak;
 using SharpGLTF.Collections;
 using System.Reflection.Metadata;
+using static System.Windows.Forms.LinkLabel;
 
 namespace Tigris
 {
@@ -34,19 +35,43 @@ namespace Tigris
         internal static string replaceFolder = "";
         private static string pendingFolder = null;
         private static List<string> conversionLogs = new List<string>();
-        
+
+        private static string logFilePath;
+        private static readonly object logFileLock = new object();
+       
+
         public static void AddConversionLog(string msg)
         {
+            string line = $"[{DateTime.Now:HH:mm:ss}] {msg}";
+
             lock (conversionLogs)
             {
                 conversionLogs.Add(msg);
                 if (conversionLogs.Count > 200)
                     conversionLogs.RemoveAt(0);
             }
+            if (!string.IsNullOrEmpty(logFilePath))
+            {
+                lock (logFileLock)
+                {
+                    File.AppendAllText(logFilePath, line + Environment.NewLine);
+                }
+            }
         }
 
         static void Main(string[] args)
         {
+            string logDir = Path.Combine(AppContext.BaseDirectory, "Logs");
+            Directory.CreateDirectory(logDir);
+
+            logFilePath = Path.Combine(
+                logDir,
+                $"ConverterLog_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.txt"
+            );
+
+            File.AppendAllText(logFilePath,
+                $"=== Converter Log Started {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n\n"
+            );
             _func = new Func();
             _style = new Style();
             _style.LoadFont();
@@ -157,6 +182,7 @@ namespace Tigris
                                     _func.provider.Initialize();
                                     _func.provider.SubmitKey(new FGuid(), new FAesKey(_aesKey));
                                     string dllPath = Path.Combine(AppContext.BaseDirectory, "oo2core_9_win64.dll");
+                                    //OodleHelper.DownloadOodleDll();
                                     if (!File.Exists(dllPath))
                                     {
                                         OodleHelper.DownloadOodleDll();
@@ -231,7 +257,16 @@ namespace Tigris
                     _func.ExportSelected(_func.ExportType, _func.ExportNameType);
                 }
                 ImGui.SameLine();
+               
 
+                if (ImGui.Button("Export All On Page"))
+                {
+                    _func.ExportAllFiltered(
+                        _func.ExportType,
+                        _func.ExportNameType
+                    );
+                }
+                ImGui.SameLine();
                 ImGui.SetNextItemWidth(150);
                 float masterVol = _func.MasterVolume;
                 if (ImGui.SliderFloat("Volume", ref masterVol, 0.0f, 1.0f, "%.2f"))
@@ -270,6 +305,27 @@ namespace Tigris
                     {
                         if (ImGui.BeginTabItem("Converter"))
                         {
+                            var converterLanguages = _func.soundItems
+                            .Select(s => s.Language)
+                            .Where(l => !string.IsNullOrEmpty(l))
+                            .Distinct()
+                            .OrderBy(l => l)
+                            .ToList();
+
+                            converterLanguages.Insert(0, "All");
+
+                            int langIndex = converterLanguages.IndexOf(_func.converterLanguage);
+                            if (langIndex < 0) langIndex = 0;
+
+                            ImGui.SetNextItemWidth(200);
+                            if (ImGui.Combo("Language", ref langIndex,
+                                converterLanguages.ToArray(),
+                                converterLanguages.Count))
+                            {
+                                _func.converterLanguage = converterLanguages[langIndex];
+                            }
+
+                            ImGui.Separator();
                             if (ImGui.Button("WEM Folder"))
                             {
                                 var t = new System.Threading.Thread(() =>

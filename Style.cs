@@ -85,7 +85,7 @@ namespace Tigris
         internal void StyleLight()
         {
             var style = ImGui.GetStyle();
-            style.FrameRounding = 12;
+            style.FrameRounding = 6;
             style.WindowPadding.X = 4; style.WindowPadding.Y = 8;
             style.TabBorderSize = 1;
             style.ScrollbarSize = 10;
@@ -145,7 +145,7 @@ namespace Tigris
         internal void StyleEarlyEagle()
         {
             var style = ImGui.GetStyle();
-            style.FrameRounding = 12;
+            style.FrameRounding = 6;
             style.WindowPadding.X = 4; style.WindowPadding.Y = 8;
             style.TabBorderSize = 1;
             style.ScrollbarSize = 10;

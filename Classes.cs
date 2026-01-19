@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NAudio.Wave;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -74,7 +75,17 @@ namespace Tigris
         public Dictionary<string, string> Subtitles { get; set; } = new Dictionary<string, string>();
         public string SubtitleText { get; set; }
     }
-    
+    public enum PlaybackStateEx
+    {
+        Playing,
+        Paused
+    }
+    public class PlayingSound
+    {
+        public WaveOutEvent Output;
+        public WaveStream Reader;
+        public PlaybackStateEx State;
+    }
     public enum ExportType
     {
         Wem,

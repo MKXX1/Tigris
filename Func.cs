@@ -53,7 +53,10 @@ namespace Tigris
         internal string lastSearchQuery = "";
         internal string lastLanguageTab = "";
         internal List<SoundItem> filteredSoundsCache = new();
-        internal readonly Dictionary<string, WaveOutEvent> playingSounds = new Dictionary<string, WaveOutEvent>();
+        //   internal readonly Dictionary<string, WaveOutEvent> playingSounds = new Dictionary<string, WaveOutEvent>();
+        internal string converterLanguage = "All";
+        internal readonly Dictionary<string, PlayingSound> playingSounds = new Dictionary<string, PlayingSound>();
+        internal string currentPlayingKey = null;
 
         internal string projectPath = "Z:\\Wwise2019.1.11.7296\\Sample";
 
@@ -175,18 +178,34 @@ namespace Tigris
         {
             MasterVolume = volume;
         }
+        /* private void UpdateAllVolumes()
+         {
+             float finalVolume = _masterVolume;
+
+             foreach (var waveOut in playingSounds)
+             {
+                 try
+                 {
+                     if (waveOut != null)
+                     {
+                         waveOut.Volume = finalVolume;
+                     }
+                 }
+                 catch (Exception ex)
+                 {
+                     Console.WriteLine($"Error volume: {ex.Message}");
+                 }
+             }
+         } */
         private void UpdateAllVolumes()
         {
             float finalVolume = _masterVolume;
 
-            foreach (var waveOut in playingSounds.Values)
+            foreach (var ps in playingSounds.Values)
             {
                 try
                 {
-                    if (waveOut != null)
-                    {
-                        waveOut.Volume = finalVolume;
-                    }
+                    ps.Output.Volume = finalVolume;
                 }
                 catch (Exception ex)
                 {
@@ -194,6 +213,7 @@ namespace Tigris
                 }
             }
         }
+
         internal void UpdateFilteredSounds(string language)
         {
 
@@ -245,11 +265,10 @@ namespace Tigris
             int maxSubtitleLines = 2;
             float rowHeight = lineH * maxSubtitleLines + style.CellPadding.Y * 2f;
 
-            // --- таблица ---
             if (ImGui.BeginTable("SoundTable", 6,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoSavedSettings))
             {
-                ImGui.TableSetupColumn("Play", ImGuiTableColumnFlags.WidthFixed, 60);
+                ImGui.TableSetupColumn("Play", ImGuiTableColumnFlags.WidthFixed, 100);
                 ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.WidthFixed, 80);
                 ImGui.TableSetupColumn("Short Name", ImGuiTableColumnFlags.WidthStretch);
                 ImGui.TableSetupColumn("Size", ImGuiTableColumnFlags.WidthFixed, 80);
@@ -273,11 +292,50 @@ namespace Tigris
 
                             ImGui.TableSetColumnIndex(0);
                             bool isPlaying = playingSounds.ContainsKey(sound.DisplayName);
-                            if (ImGui.Button($"{(isPlaying ? "Stop" : "Play")}##btn_{uniqueId}"))
+                            bool isCurrent = currentPlayingKey == sound.DisplayName;
+
+                            playingSounds.TryGetValue(sound.DisplayName, out var playing);
+
+                            if (!isCurrent)
                             {
-                                if (isPlaying) StopSound(sound.DisplayName);
-                                else Task.Run(() => PlaySound(sound.FilePath, sound.DisplayName));
+                                if (ImGui.Button($"Play##{uniqueId}"))
+                                    Task.Run(() => PlaySound(sound.FilePath, sound.DisplayName));
                             }
+                            else if (playing != null)
+                            {
+                                if (playing.State == PlaybackStateEx.Playing)
+                                {
+                                    if (ImGui.Button($"Pause##{uniqueId}"))
+                                        PauseSound(sound.DisplayName);
+
+                                    ImGui.SameLine();
+                                    if (ImGui.Button($"Stop##{uniqueId}"))
+                                        StopSound(sound.DisplayName);
+                                }
+                                else 
+                                {
+                                    if (ImGui.Button($"Resume##{uniqueId}"))
+                                        ResumeSound(sound.DisplayName);
+
+                                    ImGui.SameLine();
+                                    if (ImGui.Button($"Stop##{uniqueId}"))
+                                        StopSound(sound.DisplayName);
+                                }
+                            }
+
+
+                            //if (ImGui.Button($"{(isPlaying ? "Stop" : "Play")}##btn_{uniqueId}"))
+                            //{
+                            //     if (isPlaying)
+                            //         StopSound(sound.DisplayName);
+                            //     else
+                            //         Task.Run(() => PlaySound(sound.FilePath, sound.DisplayName));
+                            //}
+                            //if (ImGui.Button($"{(isPlaying ? "Stop" : "Play")}##btn_{uniqueId}"))
+                            //{
+                            //    if (isPlaying) StopSound(sound.DisplayName);
+                            //    else Task.Run(() => PlaySound(sound.FilePath, sound.DisplayName));
+                            //}
 
                             ImGui.TableSetColumnIndex(1);
                             ImGui.Text(soundId);
@@ -300,7 +358,27 @@ namespace Tigris
                                     ImGui.SetClipboardText(sound.DisplayName);
                                 ImGui.EndPopup();
                             }
+                            if (playingSounds.TryGetValue(sound.DisplayName, out var ps))
+                            {
+                                var reader = ps.Reader;
 
+                                float current = (float)reader.CurrentTime.TotalSeconds;
+                                float total = (float)reader.TotalTime.TotalSeconds;
+
+                                if (total > 0)
+                                {
+                                    float progress = current / total;
+
+                                    ImGui.SetNextItemWidth(200);
+                                    if (ImGui.SliderFloat($"##seek_{uniqueId}", ref progress, 0f, 1f, ""))
+                                    {
+                                        reader.CurrentTime = TimeSpan.FromSeconds(progress * total);
+                                    }
+
+                                    ImGui.SameLine();
+                                    ImGui.Text($"{reader.CurrentTime:mm\\:ss} / {reader.TotalTime:mm\\:ss}");
+                                }
+                            }
                             ImGui.TableSetColumnIndex(3);
                             ImGui.Text(sound.FormattedSize);
 
@@ -334,7 +412,7 @@ namespace Tigris
                                     }
                                     ImGui.TextWrapped(shown);
 
-                                    // полный текст в тултипе
+                                  
                                     if (ImGui.IsItemHovered())
                                     {
                                         ImGui.BeginTooltip();
@@ -410,19 +488,19 @@ namespace Tigris
                             proc.Start();
                             proc.WaitForExit();
 
-             
+
                             try { File.Delete(tempWem); } catch { }
 
                             Console.WriteLine($"Exported WAV: {fileName}");
                             break;
 
                         case ExportType.WemAndWav:
-                        
+
                             string wemPath2 = Path.Combine(exportDir, fileName + ".wem");
                             File.WriteAllBytes(wemPath2, fileData);
                             Console.WriteLine($"Exported WEM: {fileName}");
 
-                 
+
                             string wavPath2 = Path.Combine(exportDir, fileName + ".wav");
                             string tempWem2 = Path.GetTempFileName() + ".wem";
                             File.WriteAllBytes(tempWem2, fileData);
@@ -435,7 +513,7 @@ namespace Tigris
                             proc2.Start();
                             proc2.WaitForExit();
 
-                
+
                             try { File.Delete(tempWem2); } catch { }
 
                             Console.WriteLine($"Exported WAV: {fileName}");
@@ -448,12 +526,36 @@ namespace Tigris
                 }
             }
         }
+
+        internal void ExportAllFiltered(ExportType exportType, ExportNameType nameType)
+        {
+            if (filteredSoundsCache == null || filteredSoundsCache.Count == 0)
+                return;
+
+            var previousSelection = soundItems
+                .Where(s => s.Selected)
+                .ToHashSet();
+            try
+            {
+                foreach (var sound in soundItems)
+                    sound.Selected = false;
+                foreach (var sound in filteredSoundsCache)
+                    sound.Selected = true;
+                ExportSelected(exportType, nameType);
+            }
+            finally
+            {
+                foreach (var sound in soundItems)
+                    sound.Selected = previousSelection.Contains(sound);
+            }
+        }
+
         private string GetSafeFileName(string fileName)
         {
             var invalidChars = Path.GetInvalidFileNameChars();
             return new string(fileName.Where(ch => !invalidChars.Contains(ch)).ToArray());
         }
-        internal void PlaySound(string filePath, string displayName)
+        /*internal void PlaySound(string filePath, string displayName)
         {
             if (provider.Files.TryGetValue(filePath, out var file))
             {
@@ -493,12 +595,108 @@ namespace Tigris
                     catch { }
                 };
             }
+        } */
+        internal void PlaySound(string filePath, string displayName)
+        {
+            if (currentPlayingKey != null)
+            {
+                StopSound(currentPlayingKey);
+            }
+
+            if (!provider.Files.TryGetValue(filePath, out var file))
+                return;
+
+            var wemData = provider.SaveAsset(file);
+
+            string tempWem = Path.Combine(Path.GetTempPath(), Path.GetFileName(filePath));
+            File.WriteAllBytes(tempWem, wemData);
+
+            string tempWav = Path.ChangeExtension(tempWem, ".wav");
+
+            var proc = new Process
+            {
+                StartInfo =
+        {
+            FileName = Path.Combine("utils", "vgm", "vgmstream-cli.exe"),
+            Arguments = $"\"{tempWem}\" -o \"{tempWav}\"",
+            CreateNoWindow = true,
+            UseShellExecute = false
         }
+            };
+            proc.Start();
+            proc.WaitForExit();
+
+            var reader = new MediaFoundationReader(tempWav);
+            var output = new WaveOutEvent
+            {
+                Volume = _masterVolume
+            };
+
+            output.Init(reader);
+            output.Play();
+
+            var ps = new PlayingSound
+            {
+                Output = output,
+                Reader = reader,
+                State = PlaybackStateEx.Playing
+            };
+
+            playingSounds[displayName] = ps;
+            currentPlayingKey = displayName;
+
+            output.PlaybackStopped += (s, e) =>
+            {
+                reader.Dispose();
+                output.Dispose();
+                playingSounds.Remove(displayName);
+
+                if (currentPlayingKey == displayName)
+                    currentPlayingKey = null;
+
+                try
+                {
+                    File.Delete(tempWem);
+                    File.Delete(tempWav);
+                }
+                catch { }
+            };
+        }
+
+
+        //   internal void StopSound(string displayName)
+        //   {
+        //       if (playingSounds.TryGetValue(displayName, out var outputDevice))
+        //           outputDevice.Stop();
+        //   }
         internal void StopSound(string displayName)
         {
-            if (playingSounds.TryGetValue(displayName, out var outputDevice))
-                outputDevice.Stop();
+            if (playingSounds.TryGetValue(displayName, out var ps))
+            {
+                ps.Output.Stop();
+                ps.State = PlaybackStateEx.Playing;
+            }
         }
+
+        internal void PauseSound(string displayName)
+        {
+            if (playingSounds.TryGetValue(displayName, out var ps) &&
+                ps.State == PlaybackStateEx.Playing)
+            {
+                ps.Output.Pause();
+                ps.State = PlaybackStateEx.Paused;
+            }
+        }
+        internal void ResumeSound(string displayName)
+        {
+            if (playingSounds.TryGetValue(displayName, out var ps) &&
+                ps.State == PlaybackStateEx.Paused)
+            {
+                ps.Output.Play();
+                ps.State = PlaybackStateEx.Playing;
+            }
+        }
+
         internal void BuildSoundMapAndList()
         {
             soundItems.Clear();
@@ -1078,14 +1276,14 @@ namespace Tigris
             Program.AddConversionLog($"---- Conversion finished ----");
             Program.AddConversionLog($"Converted: {convertedCount}, Skipped: {skippedCount}, Total WAVs: {wavFiles.Length}");
         }
-        internal void ProcessWemFolderToReplace(string wemFolderPath, bool matchById = true, bool matchByName = false, bool adjustSizes = true)
+        internal void ProcessWemFolderToReplace(string wemFolderPath, bool matchById = false, bool matchByName = true, bool adjustSizes = true)
         {
             if (string.IsNullOrEmpty(wemFolderPath) || !Directory.Exists(wemFolderPath))
             {
                 Program.AddConversionLog("WEM folder not found or path is invalid");
                 return;
             }
-
+            Program.AddConversionLog($"Language filter: {converterLanguage}");
             var wemFiles = Directory.GetFiles(wemFolderPath, "*.wem");
             if (wemFiles.Length == 0)
             {
@@ -1133,7 +1331,8 @@ namespace Tigris
 
             try
             {
-                foreach (var sound in soundItems)
+                //   foreach (var sound in soundItems)
+                foreach (var sound in GetConverterSounds())
                 {
                     try
                     {
@@ -1159,11 +1358,16 @@ namespace Tigris
                         else
                         {
                             skippedCount++;
-                            Program.AddConversionLog($"Skipped: {soundName} - no matching WEM file found");
+                        //    Program.AddConversionLog($"Skipped: {soundName} - no matching WEM file found");
+                            Program.AddConversionLog(
+    $"Skipped: {FormatSoundLog(sound)} - no matching WEM file found"
+);
+
                             continue;
                         }
 
-                        Program.AddConversionLog($"Found by {foundBy} -> {Path.GetFileName(sourceWemFile)}");
+                    //    Program.AddConversionLog($"Found by {foundBy} -> {Path.GetFileName(sourceWemFile)}");
+                        Program.AddConversionLog($"Found by ID: {FormatSoundLog(sound)}");
 
                         string tempFile = Path.Combine(tempProcessingFolder, Path.GetFileName(sourceWemFile));
                         File.Copy(sourceWemFile, tempFile, true);
@@ -1201,7 +1405,11 @@ namespace Tigris
 
                         File.Copy(tempFile, targetPath, true);
 
-                        Program.AddConversionLog($"Copied: {Path.GetFileName(sourceWemFile)} -> {Path.GetFileName(sound.FilePath)}");
+                 //       Program.AddConversionLog($"Copied: {Path.GetFileName(sourceWemFile)} -> {Path.GetFileName(sound.FilePath)}");
+                        Program.AddConversionLog(
+    $"Copied: {Path.GetFileName(sourceWemFile)} -> {FormatSoundLog(sound)}"
+);
+
                         copiedCount++;
                         processedCount++;
 
@@ -1283,7 +1491,7 @@ namespace Tigris
                 Program.AddConversionLog("Replace directory not found");
                 return;
             }
-
+            Program.AddConversionLog($"Language filter: {converterLanguage}");
             var wemFiles = Directory.GetFiles(_replaceDirectory, "*.wem", SearchOption.AllDirectories);
             if (wemFiles.Length == 0)
             {
@@ -1318,7 +1526,8 @@ namespace Tigris
                 filesByBaseName[baseFileName] = wemFile;
             }
 
-            foreach (var sound in soundItems)
+            //   foreach (var sound in soundItems)
+            foreach (var sound in GetConverterSounds())
             {
                 try
                 {
@@ -1330,7 +1539,9 @@ namespace Tigris
 
                     if (matchById && filesById.TryGetValue(soundId, out wemFileToAdjust))
                     {
-                        Program.AddConversionLog($"Found by ID: {soundId}");
+                      //  Program.AddConversionLog($"Found by ID: {soundId}");
+                        Program.AddConversionLog($"Found by ID: {FormatSoundLog(sound)}");
+
                     }
                     else if (matchByName && filesByName.TryGetValue(soundName, out wemFileToAdjust))
                     {
@@ -1370,13 +1581,21 @@ namespace Tigris
                         fileStream.Write(zeroBytes, 0, zeroBytes.Length);
                     }
 
-                    Program.AddConversionLog($"Adjusted: {Path.GetFileName(wemFileToAdjust)} from {currentSize} to {targetSize} bytes (+{bytesToAdd} bytes)");
+                    //  Program.AddConversionLog($"Adjusted: {Path.GetFileName(wemFileToAdjust)} from {currentSize} to {targetSize} bytes (+{bytesToAdd} bytes)");
+                    Program.AddConversionLog(
+    $"Adjusted: {FormatSoundLog(sound)} from {currentSize} to {targetSize} bytes"
+);
+
                     adjustedCount++;
 
                 }
                 catch (Exception ex)
                 {
-                    Program.AddConversionLog($"Error adjusting file for {sound.DisplayName}: {ex.Message}");
+                 //   Program.AddConversionLog($"Error adjusting file for {sound.DisplayName}: {ex.Message}");
+                    Program.AddConversionLog(
+    $"Error adjusting file for {FormatSoundLog(sound)}: {ex.Message}"
+);
+
                     errorCount++;
                 }
             }
@@ -1386,5 +1605,18 @@ namespace Tigris
             Program.AddConversionLog($"Skipped: {skippedCount}");
             Program.AddConversionLog($"Errors: {errorCount}");
         }
+        internal IEnumerable<SoundItem> GetConverterSounds()
+        {
+            if (converterLanguage == "All")
+                return soundItems;
+
+            return soundItems.Where(s => s.Language == converterLanguage);
+        }
+        private string FormatSoundLog(SoundItem sound)
+        {
+            string id = Path.GetFileNameWithoutExtension(sound.FilePath);
+            return $"{id} ({sound.DisplayName})";
+        }
+
     }
 }
