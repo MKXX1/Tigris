@@ -187,8 +187,7 @@ namespace Tigris
                                     {
                                         OodleHelper.DownloadOodleDll();
                                     }
-                                    OodleHelper.Initialize(@"utils\oo2core_9_win64.dll");
-                                 //   OodleHelper.Initialize(@"oo2core_9_win64.dll");
+                                    OodleHelper.Initialize(@"utils/oo2core_9_win64.dll");
                                    
                                     Console.WriteLine($"Provider initialized: {_func.gameDirectory}");
 

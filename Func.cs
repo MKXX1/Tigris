@@ -2,9 +2,13 @@
 using CUE4Parse.Compression;
 using CUE4Parse.Encryption.Aes;
 using CUE4Parse.FileProvider;
+using CUE4Parse.FileProvider.Objects;
 using CUE4Parse.UE4.Localization;
+using CUE4Parse.UE4.IO;
+using CUE4Parse.UE4.Pak;
 using CUE4Parse.UE4.Objects.Core.i18N;
 using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Readers;
 using CUE4Parse.UE4.Versions;
 using ImGuiNET;
 using NAudio.Wave;
@@ -25,10 +29,10 @@ using System.Threading.Tasks;
 
 namespace Tigris
 {
-    public class Func
+public class Func
     {
-        //internal string wwisePath = "Z:\\Wwise2019.1.11.7296";
-        //internal string wwiseProjectPath = "Z:\\Wwise2019.1.11.7296\\Sample";
+        internal string wwisePath = "Z:\\Wwise2019.1.11.7296";
+        internal string wwiseProjectPath = "Z:\\Wwise2019.1.11.7296\\Sample";
         internal string wavInputPath = "";
         private ConfigManager _configManager;
         private float _masterVolume = 1.0f;
@@ -44,6 +48,8 @@ namespace Tigris
 
         internal string currentSubtitleLanguage = "en";
         internal const string _aesKey = "0x613E92E0F3CE880FC652EC86254E2581126AE86D63BA46550FB2CE0EC2EDA439";
+        //internal const string _targetFolder = "OPP/Content/WwiseAudio";
+        //internal const string _targetFolderLocres = "OPP/Content/Localization";
         internal const string _replaceDirectory = "utils/repak/put-ur-files-here";
         internal const string _targetFolder = "OPP/Content/WwiseAudio/Windows";
         internal const string _targetFolderMedia = "OPP/Content/WwiseAudio/Media";
@@ -59,7 +65,7 @@ namespace Tigris
         internal readonly Dictionary<string, PlayingSound> playingSounds = new Dictionary<string, PlayingSound>();
         internal string currentPlayingKey = null;
 
-       // internal string projectPath = "Z:\\Wwise2019.1.11.7296\\Sample";
+        internal string projectPath = "Z:\\Wwise2019.1.11.7296\\Sample";
 
 
         // internal WwiseConverterWrapper wwiseConverter = new WwiseConverterWrapper();
@@ -232,6 +238,7 @@ namespace Tigris
                 lastSearchQuery = searchQuery;
                 lastLanguageTab = language;
 
+                Console.WriteLine($"  Filtered to {filteredSoundsCache.Count} sounds");
 
                 for (int i = 0; i < Math.Min(3, filteredSoundsCache.Count); i++)
                 {
@@ -276,7 +283,6 @@ namespace Tigris
                 else
                 {
                     ImGui.Text($"No sounds found for language: {language}");
-
                     ImGui.Spacing();
                     ImGui.Text("Available languages:");
                     var availableLangs = soundItems.Select(s => s.Language).Distinct().OrderBy(l => l);
@@ -440,8 +446,6 @@ namespace Tigris
                                         cutPos -= 10;
                                     }
                                     ImGui.TextWrapped(shown);
-
-            
                                     if (ImGui.IsItemHovered())
                                     {
                                         ImGui.BeginTooltip();
@@ -764,6 +768,8 @@ namespace Tigris
 
             return allSubtitles;
         }
+        
+
         internal void BuildSoundMapAndList()
         {
             soundItems.Clear();
@@ -782,7 +788,6 @@ namespace Tigris
                .ToList();
 
             Console.WriteLine($"Found {jsonFiles.Count} JSON files in Windows folders");
-
 
             foreach (var jsonFile in jsonFiles)
             {
@@ -828,25 +833,26 @@ namespace Tigris
 
             var wemFilesByLanguage = new Dictionary<string, List<(string Id, string Path)>>();
 
+
             wemFilesByLanguage["English(US)"] = new List<(string, string)>();
             wemFilesByLanguage["Francais"] = new List<(string, string)>();
             wemFilesByLanguage["SFX"] = new List<(string, string)>();
+
             foreach (var file in provider.Files)
             {
                 if (file.Key.EndsWith(".wem", StringComparison.OrdinalIgnoreCase))
                 {
                     string fileName = Path.GetFileNameWithoutExtension(file.Key);
 
-  
-                    if (file.Key.Contains("/Media/English(US)/"))
+                    if (file.Key.Contains("/Windows/Media/English(US)/"))
                     {
                         wemFilesByLanguage["English(US)"].Add((fileName, file.Key));
                     }
-                    else if (file.Key.Contains("/Media/Francais/"))
+                    else if (file.Key.Contains("/Windows/Media/Francais/"))
                     {
                         wemFilesByLanguage["Francais"].Add((fileName, file.Key));
                     }
-                    else if (file.Key.Contains("/Media/"))
+                    else if (file.Key.Contains("/Windows/Media/"))
                     {
                         wemFilesByLanguage["SFX"].Add((fileName, file.Key));
                     }
@@ -857,19 +863,19 @@ namespace Tigris
             Console.WriteLine($"WEM files in Francais: {wemFilesByLanguage["Francais"].Count}");
 
             foreach (var language in wemFilesByLanguage.Keys)
-            {
-                foreach (var (fileId, filePath) in wemFilesByLanguage[language])
-                {
-                    try
-                    {
-                        if (provider.Files.TryGetValue(filePath, out var fileEntry))
-                        {
-                            string displayName = fileId;
-
-                            if (soundMap.TryGetValue(fileId, out var shortName))
-                            {
-                                displayName = shortName;
-                            }
+            { 
+               foreach (var (fileId, filePath) in wemFilesByLanguage[language])
+               {
+                   try
+                   {
+                       if (provider.Files.TryGetValue(filePath, out var fileEntry))
+                       {
+                           string displayName = fileId;
+            
+                           if (soundMap.TryGetValue(fileId, out var shortName))
+                           {
+                               displayName = shortName;
+                           }
 
                             long fileSize = fileEntry.Size;
                             string formattedSize = FormatFileSize(fileSize);
@@ -882,7 +888,6 @@ namespace Tigris
                                 Size = fileSize,
                                 FormattedSize = formattedSize
                             };
-
                             foreach (var langPair in allSubtitles)
                             {
                                 if (langPair.Value.TryGetValue(soundItem.DisplayName, out var subText))
@@ -987,6 +992,7 @@ namespace Tigris
                             else
                             {
                                 Console.WriteLine("No 'Media' array found in this bank");
+
                                 string[] possibleArrays = { "MediaFiles", "IncludedMemoryFiles", "ExcludedMemoryFiles", "Files" };
                                 foreach (var propName in possibleArrays)
                                 {
@@ -1017,7 +1023,7 @@ namespace Tigris
                 Console.WriteLine($"Error parsing JSON: {ex.Message}");
                 if (jsonContent.Length > 200)
                 {
-                    Console.WriteLine($"First 200 str: {jsonContent.Substring(0, 200)}...");
+                    Console.WriteLine($"First 200 chars: {jsonContent.Substring(0, 200)}...");
                 }
             }
         }
@@ -1047,6 +1053,7 @@ namespace Tigris
                     if (mediaItem.TryGetProperty("ShortName", out var nameElement))
                         shortName = nameElement.GetString() ?? "";
 
+
                     if (mediaItem.TryGetProperty("Language", out var langElement))
                     {
                         string lang = langElement.GetString();
@@ -1054,21 +1061,23 @@ namespace Tigris
                             language = lang;
                     }
 
+
                     if (!string.IsNullOrEmpty(fileId) && !string.IsNullOrEmpty(shortName))
                     {
                         string cleanName = shortName;
                         if (cleanName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
                             cleanName = cleanName.Substring(0, cleanName.Length - 4);
 
+
                         if (cleanName.EndsWith(".wem", StringComparison.OrdinalIgnoreCase))
                             cleanName = cleanName.Substring(0, cleanName.Length - 4);
+
 
                         if (!soundMap.ContainsKey(fileId))
                         {
                             soundMap[fileId] = cleanName;
                             languageMap[fileId] = language;
                             parsedCount++;
-
 
                             if (displayedCount < 5)
                             {
@@ -1370,8 +1379,7 @@ namespace Tigris
                 {
                     OodleHelper.DownloadOodleDll();
                 }
-                OodleHelper.Initialize(@"utils\oo2core_9_win64.dll");
-            //    OodleHelper.Initialize(@"oo2core_9_win64.dll");
+                OodleHelper.Initialize(@"utils/oo2core_9_win64.dll");
 
                 Console.WriteLine("Provider auto-initialized successfully with Paks path");
 
@@ -1471,6 +1479,8 @@ namespace Tigris
                 }
             }
 
+            Program.AddConversionLog($"---- Conversion finished ----");
+            Program.AddConversionLog($"Converted: {convertedCount}, Skipped: {skippedCount}, Total WAVs: {wavFiles.Length}");
         }
         
         private string GetBaseFileName(string fileName)
@@ -1598,6 +1608,8 @@ namespace Tigris
                                 if (currentSize > targetSize)
                                 {
                                     Program.AddConversionLog($"File {Path.GetFileName(sourceWemFile)} is larger ({currentSize} bytes) than target ({targetSize} bytes). Size won't be reduced.");
+                                    errorCount++;
+                                    skippedCount++;
                                 }
                                 else
                                 {
@@ -1646,6 +1658,7 @@ namespace Tigris
                 catch { }
             }
 
+            Program.AddConversionLog($"---- Processing completed ----");
             Program.AddConversionLog($"Processed: {processedCount}");
             Program.AddConversionLog($"Copied: {copiedCount}");
             if (adjustSizes)
