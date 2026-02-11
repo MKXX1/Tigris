@@ -187,7 +187,8 @@ namespace Tigris
                                     {
                                         OodleHelper.DownloadOodleDll();
                                     }
-                                    OodleHelper.Initialize(@"oo2core_9_win64.dll");
+                                    OodleHelper.Initialize(@"utils\oo2core_9_win64.dll");
+                                 //   OodleHelper.Initialize(@"oo2core_9_win64.dll");
                                    
                                     Console.WriteLine($"Provider initialized: {_func.gameDirectory}");
 
@@ -298,125 +299,127 @@ namespace Tigris
                         }
                         ImGui.EndTabBar();
                     }
-                } /*Sound Tabs*/
-                if (_func.soundsLoaded)
-                {
-                    if (ImGui.BeginTabBar("LanguageTabs"))
-                    {
-                        if (ImGui.BeginTabItem("Converter"))
-                        {
-                            var converterLanguages = _func.soundItems
-                            .Select(s => s.Language)
-                            .Where(l => !string.IsNullOrEmpty(l))
-                            .Distinct()
-                            .OrderBy(l => l)
-                            .ToList();
-
-                            converterLanguages.Insert(0, "All");
-
-                            int langIndex = converterLanguages.IndexOf(_func.converterLanguage);
-                            if (langIndex < 0) langIndex = 0;
-
-                            ImGui.SetNextItemWidth(200);
-                            if (ImGui.Combo("Language", ref langIndex,
-                                converterLanguages.ToArray(),
-                                converterLanguages.Count))
-                            {
-                                _func.converterLanguage = converterLanguages[langIndex];
-                            }
-
-                            ImGui.Separator();
-                            if (ImGui.Button("WEM Folder"))
-                            {
-                                var t = new System.Threading.Thread(() =>
-                                {
-                                    using var fbd = new FolderBrowserDialog();
-                                    fbd.ShowNewFolderButton = false;
-                                    fbd.RootFolder = Environment.SpecialFolder.Desktop;
-
-                                    if (fbd.ShowDialog() == DialogResult.OK)
-                                    {
-                                        pendingFolder = fbd.SelectedPath;
-                                    }
-                                });
-                                t.SetApartmentState(System.Threading.ApartmentState.STA);
-                                t.Start();
-                            }
-
-                            if (!string.IsNullOrEmpty(pendingFolder))
-                            {
-                                _func.WemFolder = pendingFolder;
-                                pendingFolder = null;
-
-                                if (Directory.Exists(_func.WemFolder))
-                                {
-                                    var wavFiles = Directory.GetFiles(_func.WemFolder, "*.wem");
-                                    if (wavFiles.Length > 0)
-                                    {
-                                        AddConversionLog($"Selected WEM folder: {_func.WemFolder}");
-                                        AddConversionLog($"Found {wavFiles.Length} WEM files");
-
-                                    }
-                                    else
-                                    {
-                                        AddConversionLog($"No WEM files found in: {_func.WemFolder}");
-                                        _func.WemFolder = null;
-                                    }
-                                }
-                                else
-                                {
-                                    AddConversionLog($"Folder does not exist: {_func.WemFolder}");
-                                    _func.WemFolder = null;
-                                }
-                            }
-
-                            if (_func.WemFolder != null)
-                            {
-                                ImGui.SameLine();
-                                ImGui.Text(_func.WemFolder != "" ? _func.WemFolder : "Not set");
-                            }
-                            else
-                            {
-
-                                ImGui.SameLine();
-                                ImGui.Text("Not set");
-                            }
-
-                            ImGui.Separator();
-                            ImGui.Spacing();
-
-                            if (ImGui.Button("Convert File To Match Size"))
-                            {
-                                _func.ProcessWemFolderToReplaceThenAdjust(_func.WemFolder, true, true);
-                            }
-                            ImGui.SameLine();
-                            if (ImGui.Button("Make Mod"))
-                            {
-                                Task.Run(() => _func.RunRepakBat());
-                            }
-                            ImGui.Separator();
-                            ImGui.Text("Log:");
-
-                            if (ImGui.BeginChild("ConversionLog", new Vector2(0, 500)))
-                            {
-                                lock (conversionLogs)
-                                {
-                                    foreach (var log in conversionLogs)
-                                    {
-                                        if (log.StartsWith(""))
-                                            ImGui.Text(log);
-                                        else
-                                            ImGui.TextUnformatted(log);
-                                    }
-                                }
-                                ImGui.EndChild();
-                            }
-                            ImGui.EndTabItem();
-                        }
-                        ImGui.EndTabBar();
-                    }
-                } /*Converter Tab*/
-                //  ImGui.ShowDemoWindow();
+                }
+                
+                /*Sound Tabs*/
+                 if (_func.soundsLoaded)
+                 {
+                     if (ImGui.BeginTabBar("LanguageTabs"))
+                     {
+                         if (ImGui.BeginTabItem("Converter"))
+                         {
+                             var converterLanguages = _func.soundItems
+                             .Select(s => s.Language)
+                             .Where(l => !string.IsNullOrEmpty(l))
+                             .Distinct()
+                             .OrderBy(l => l)
+                             .ToList();
+                
+                             converterLanguages.Insert(0, "All");
+                
+                             int langIndex = converterLanguages.IndexOf(_func.converterLanguage);
+                             if (langIndex < 0) langIndex = 0;
+                
+                             ImGui.SetNextItemWidth(200);
+                             if (ImGui.Combo("Language", ref langIndex,
+                                 converterLanguages.ToArray(),
+                                 converterLanguages.Count))
+                             {
+                                 _func.converterLanguage = converterLanguages[langIndex];
+                             }
+                
+                             ImGui.Separator();
+                             if (ImGui.Button("WEM Folder"))
+                               {
+                                   var t = new System.Threading.Thread(() =>
+                                   {
+                                       using var fbd = new FolderBrowserDialog();
+                                       fbd.ShowNewFolderButton = false;
+                                       fbd.RootFolder = Environment.SpecialFolder.Desktop;
+                
+                                       if (fbd.ShowDialog() == DialogResult.OK)
+                                       {
+                                           pendingFolder = fbd.SelectedPath;
+                                       }
+                                   });
+                                   t.SetApartmentState(System.Threading.ApartmentState.STA);
+                                   t.Start();
+                               }
+                
+                             if (!string.IsNullOrEmpty(pendingFolder))
+                               {
+                                   _func.WemFolder = pendingFolder;
+                                   pendingFolder = null;
+                
+                                   if (Directory.Exists(_func.WemFolder))
+                                   {
+                                       var wavFiles = Directory.GetFiles(_func.WemFolder, "*.wem");
+                                       if (wavFiles.Length > 0)
+                                       {
+                                           AddConversionLog($"Selected WEM folder: {_func.WemFolder}");
+                                           AddConversionLog($"Found {wavFiles.Length} WEM files");
+                
+                                       }
+                                       else
+                                       {
+                                           AddConversionLog($"No WEM files found in: {_func.WemFolder}");
+                                           _func.WemFolder = null;
+                                       }
+                                   }
+                                   else
+                                   {
+                                       AddConversionLog($"Folder does not exist: {_func.WemFolder}");
+                                       _func.WemFolder = null;
+                                   }
+                               }
+                
+                             if (_func.WemFolder != null)
+                               {
+                                   ImGui.SameLine();
+                                   ImGui.Text(_func.WemFolder != "" ? _func.WemFolder : "Not set");
+                               }
+                             else
+                             {
+                
+                                 ImGui.SameLine();
+                                 ImGui.Text("Not set");
+                             }
+                
+                             ImGui.Separator();
+                             ImGui.Spacing();
+                
+                             if (ImGui.Button("Convert File To Match Size"))
+                             {
+                                 _func.ProcessWemFolderToReplace(_func.WemFolder, true, true);
+                             }
+                             ImGui.SameLine();
+                             if (ImGui.Button("Make Mod"))
+                             {
+                                 Task.Run(() => _func.RunRepakBat());
+                             }
+                             ImGui.Separator();
+                             ImGui.Text("Log:");
+                
+                             if (ImGui.BeginChild("ConversionLog", new Vector2(0, 500)))
+                             {
+                                 lock (conversionLogs)
+                                 {
+                                     foreach (var log in conversionLogs)
+                                     {
+                                         if (log.StartsWith(""))
+                                             ImGui.Text(log);
+                                         else
+                                             ImGui.TextUnformatted(log);
+                                     }
+                                 }
+                                 ImGui.EndChild();
+                             }
+                             ImGui.EndTabItem();
+                         }
+                         ImGui.EndTabBar();
+                     }
+                  } /*Converter Tab*/
+                 // ImGui.ShowDemoWindow();
                 ImGui.End();
             }
         }

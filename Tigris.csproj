@@ -82,6 +82,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="utils\oo2core_9_win64.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="utils\repak\repak.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

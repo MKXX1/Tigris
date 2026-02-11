@@ -1,33 +1,34 @@
-﻿using ImGuiNET;
+﻿using CUE4Parse;
+using CUE4Parse.Compression;
+using CUE4Parse.Encryption.Aes;
+using CUE4Parse.FileProvider;
+using CUE4Parse.UE4.Localization;
+using CUE4Parse.UE4.Objects.Core.i18N;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Versions;
+using ImGuiNET;
+using NAudio.Wave;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
+using System.Numerics;
+using System.Reflection;
+using System.Reflection.Metadata;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using CUE4Parse.Encryption.Aes;
-using CUE4Parse.FileProvider;
-using CUE4Parse.UE4.Objects.Core.Misc;
-using CUE4Parse.UE4.Versions;
-using CUE4Parse.UE4.Localization;
-using CUE4Parse.Compression;
-using NAudio.Wave;
-using System.Diagnostics;
 using System.Threading.Tasks;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json;
-using System.Reflection;
-using System.Numerics;
-using CUE4Parse;
-using CUE4Parse.UE4.Objects.Core.i18N;
 
 namespace Tigris
 {
     public class Func
     {
-        internal string wwisePath = "Z:\\Wwise2019.1.11.7296";
-        internal string wwiseProjectPath = "Z:\\Wwise2019.1.11.7296\\Sample";
+        //internal string wwisePath = "Z:\\Wwise2019.1.11.7296";
+        //internal string wwiseProjectPath = "Z:\\Wwise2019.1.11.7296\\Sample";
         internal string wavInputPath = "";
         private ConfigManager _configManager;
         private float _masterVolume = 1.0f;
@@ -43,10 +44,10 @@ namespace Tigris
 
         internal string currentSubtitleLanguage = "en";
         internal const string _aesKey = "0x613E92E0F3CE880FC652EC86254E2581126AE86D63BA46550FB2CE0EC2EDA439";
-        internal const string _targetFolder = "OPP/Content/WwiseAudio";
-        internal const string _targetFolderLocres = "OPP/Content/Localization";
         internal const string _replaceDirectory = "utils/repak/put-ur-files-here";
-
+        internal const string _targetFolder = "OPP/Content/WwiseAudio/Windows";
+        internal const string _targetFolderMedia = "OPP/Content/WwiseAudio/Media";
+        internal const string _targetFolderLocres = "OPP/Content/Localization";
         internal string searchQuery = "";
         internal bool showWindow = true;
 
@@ -58,7 +59,7 @@ namespace Tigris
         internal readonly Dictionary<string, PlayingSound> playingSounds = new Dictionary<string, PlayingSound>();
         internal string currentPlayingKey = null;
 
-        internal string projectPath = "Z:\\Wwise2019.1.11.7296\\Sample";
+       // internal string projectPath = "Z:\\Wwise2019.1.11.7296\\Sample";
 
 
         // internal WwiseConverterWrapper wwiseConverter = new WwiseConverterWrapper();
@@ -216,18 +217,27 @@ namespace Tigris
 
         internal void UpdateFilteredSounds(string language)
         {
+            Console.WriteLine($"UpdateFilteredSounds: language='{language}', soundItems={soundItems.Count}");
 
-            if (searchQuery != lastSearchQuery || language != lastLanguageTab)
+            if (language != lastLanguageTab || searchQuery != lastSearchQuery)
             {
+                Console.WriteLine($"  Conditions changed, updating cache...");
+
                 filteredSoundsCache = soundItems
                     .Where(s =>
-                        (language == "All" || s.Language == language) &&
-                        (string.IsNullOrWhiteSpace(searchQuery) ||
-                         MatchesSearch(s, searchQuery)))
+                        (language == "All" || string.Equals(s.Language, language, StringComparison.OrdinalIgnoreCase)) &&
+                        (string.IsNullOrWhiteSpace(searchQuery) || MatchesSearch(s, searchQuery)))
                     .ToList();
 
                 lastSearchQuery = searchQuery;
                 lastLanguageTab = language;
+
+
+                for (int i = 0; i < Math.Min(3, filteredSoundsCache.Count); i++)
+                {
+                    var sound = filteredSoundsCache[i];
+                    Console.WriteLine($"    {i}: {sound.DisplayName} ({sound.Language})");
+                }
             }
         }
         internal bool MatchesSearch(SoundItem sound, string query)
@@ -255,7 +265,26 @@ namespace Tigris
 
             if (itemsCount == 0)
             {
-                ImGui.Text("No sounds found matching your search");
+                if (soundItems.Count == 0)
+                {
+                    ImGui.Text("No sounds loaded. Please select a valid game folder.");
+                }
+                else if (!string.IsNullOrEmpty(searchQuery))
+                {
+                    ImGui.Text($"No sounds found matching '{searchQuery}' in {language}");
+                }
+                else
+                {
+                    ImGui.Text($"No sounds found for language: {language}");
+
+                    ImGui.Spacing();
+                    ImGui.Text("Available languages:");
+                    var availableLangs = soundItems.Select(s => s.Language).Distinct().OrderBy(l => l);
+                    foreach (var lang in availableLangs)
+                    {
+                        ImGui.Text($"  - {lang}");
+                    }
+                }
                 ImGui.EndChild();
                 return;
             }
@@ -312,7 +341,7 @@ namespace Tigris
                                     if (ImGui.Button($"Stop##{uniqueId}"))
                                         StopSound(sound.DisplayName);
                                 }
-                                else 
+                                else // Paused
                                 {
                                     if (ImGui.Button($"Resume##{uniqueId}"))
                                         ResumeSound(sound.DisplayName);
@@ -412,7 +441,7 @@ namespace Tigris
                                     }
                                     ImGui.TextWrapped(shown);
 
-                                  
+            
                                     if (ImGui.IsItemHovered())
                                     {
                                         ImGui.BeginTooltip();
@@ -696,7 +725,45 @@ namespace Tigris
                 ps.State = PlaybackStateEx.Playing;
             }
         }
+        internal Dictionary<string, Dictionary<string, string>> LoadAllSubtitles()
+        {
+            var allSubtitles = new Dictionary<string, Dictionary<string, string>>();
+            var exeDir = AppContext.BaseDirectory;
+            var locBase = Path.Combine(exeDir, "LOC");
 
+            if (!Directory.Exists(locBase))
+                return allSubtitles;
+
+            foreach (var jsonFile in Directory.GetFiles(locBase, "*.json", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    string langFolder = new DirectoryInfo(Path.GetDirectoryName(jsonFile)).Name;
+                    if (!allSubtitles.ContainsKey(langFolder))
+                        allSubtitles[langFolder] = new Dictionary<string, string>();
+
+                    string json = File.ReadAllText(jsonFile, Encoding.UTF8);
+                    var jo = JObject.Parse(json);
+
+                    if (jo.TryGetValue("Subtitles", out var subObj) && subObj is JObject subDict)
+                    {
+                        foreach (var prop in subDict.Properties())
+                        {
+                            string key = prop.Name;
+                            string value = prop.Value.ToString();
+                            if (!allSubtitles[langFolder].ContainsKey(key))
+                                allSubtitles[langFolder][key] = value;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error reading {jsonFile}: {ex.Message}");
+                }
+            }
+
+            return allSubtitles;
+        }
         internal void BuildSoundMapAndList()
         {
             soundItems.Clear();
@@ -704,10 +771,18 @@ namespace Tigris
             var soundMap = new Dictionary<string, string>();
             var languageMap = new Dictionary<string, string>();
 
+            Console.WriteLine("=== BuildSoundMapAndList started ===");
+
+            var allSubtitles = LoadAllSubtitles();
+            Console.WriteLine($"Loaded subtitles: {allSubtitles.Count} languages");
+
             var jsonFiles = provider.Files
-                .Where(f => f.Key.EndsWith(".json", StringComparison.OrdinalIgnoreCase) &&
-                            f.Key.StartsWith(_targetFolder, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+               .Where(f => f.Key.EndsWith(".json", StringComparison.OrdinalIgnoreCase) &&
+                          f.Key.Contains("/Windows/"))
+               .ToList();
+
+            Console.WriteLine($"Found {jsonFiles.Count} JSON files in Windows folders");
+
 
             foreach (var jsonFile in jsonFiles)
             {
@@ -716,72 +791,116 @@ namespace Tigris
                     var jsonData = provider.SaveAsset(jsonFile.Value);
                     if (jsonData != null && jsonData.Length > 0)
                     {
-                        string jsonContent = Encoding.UTF8.GetString(jsonData);
-                        ParseJsonForSoundNames(jsonContent, soundMap, languageMap);
-                    }
-                }
-                catch { }
-            }
-
-            var allSubtitles = LoadAllSubtitles();
-
-            var filesToList = provider.Files
-                .Where(f => f.Key.StartsWith(_targetFolder, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            foreach (var file in filesToList)
-            {
-                string fileName = Path.GetFileName(file.Key);
-                string language = "Unknown";
-
-                long fileSize = file.Value.Size;
-                string formattedSize = FormatFileSize(fileSize);
-
-                var soundItem = new SoundItem
-                {
-                    DisplayName = fileName,
-                    FilePath = file.Key,
-                    Language = language,
-                    Size = fileSize,
-                    FormattedSize = formattedSize
-                };
-
-                if (fileName.EndsWith(".wem", StringComparison.OrdinalIgnoreCase))
-                {
-                    var match = Regex.Match(fileName, @"([0-9A-F]+)\.wem$", RegexOptions.IgnoreCase);
-                    if (match.Success)
-                    {
-                        string fileId = match.Groups[1].Value;
-
-                        if (soundMap.TryGetValue(fileId, out var soundName))
-                            soundItem.DisplayName = soundName;
-
-                        if (languageMap.TryGetValue(fileId, out var fileLanguage))
-                            soundItem.Language = fileLanguage;
-
-                        foreach (var langPair in allSubtitles)
+                        string jsonContent;
+                        if (jsonData.Length >= 3 && jsonData[0] == 0xEF && jsonData[1] == 0xBB && jsonData[2] == 0xBF)
                         {
-                            if (langPair.Value.TryGetValue(soundItem.DisplayName, out var subText))
-                                soundItem.Subtitles[langPair.Key] = subText;
-                        }
-
-                        string uniqueKey = $"{fileId}_{soundItem.DisplayName}";
-
-                        if (uniqueSounds.TryGetValue(uniqueKey, out var existing))
-                        {
-                            if (existing.Subtitles.Count == 0 && soundItem.Subtitles.Count > 0)
-                            {
-                                uniqueSounds[uniqueKey] = soundItem;
-                            }
-                            else if (existing.Language == "Unknown" && soundItem.Language != "Unknown")
-                            {
-                                uniqueSounds[uniqueKey] = soundItem;
-                            }
+                            jsonContent = Encoding.UTF8.GetString(jsonData, 3, jsonData.Length - 3);
                         }
                         else
                         {
-                            uniqueSounds[uniqueKey] = soundItem;
+                            jsonContent = Encoding.UTF8.GetString(jsonData);
                         }
+
+                        string language = "Unknown";
+                        var parts = jsonFile.Key.Split('/');
+                        for (int i = 0; i < parts.Length; i++)
+                        {
+                            if (parts[i].Equals("Windows", StringComparison.OrdinalIgnoreCase) && i + 1 < parts.Length)
+                            {
+                                language = parts[i + 1];
+                                break;
+                            }
+                        }
+
+                        Console.WriteLine($"Parsing JSON: {Path.GetFileName(jsonFile.Key)} (Language: {language})");
+                        ParseJsonForSoundNames(jsonContent, soundMap, languageMap, language);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error parsing JSON {jsonFile.Key}: {ex.Message}");
+                }
+            }
+
+            Console.WriteLine($"Sound map size: {soundMap.Count} entries");
+
+            int foundFiles = 0;
+
+            var wemFilesByLanguage = new Dictionary<string, List<(string Id, string Path)>>();
+
+            wemFilesByLanguage["English(US)"] = new List<(string, string)>();
+            wemFilesByLanguage["Francais"] = new List<(string, string)>();
+            wemFilesByLanguage["SFX"] = new List<(string, string)>();
+            foreach (var file in provider.Files)
+            {
+                if (file.Key.EndsWith(".wem", StringComparison.OrdinalIgnoreCase))
+                {
+                    string fileName = Path.GetFileNameWithoutExtension(file.Key);
+
+  
+                    if (file.Key.Contains("/Media/English(US)/"))
+                    {
+                        wemFilesByLanguage["English(US)"].Add((fileName, file.Key));
+                    }
+                    else if (file.Key.Contains("/Media/Francais/"))
+                    {
+                        wemFilesByLanguage["Francais"].Add((fileName, file.Key));
+                    }
+                    else if (file.Key.Contains("/Media/"))
+                    {
+                        wemFilesByLanguage["SFX"].Add((fileName, file.Key));
+                    }
+                }
+            }
+
+            Console.WriteLine($"WEM files in English(US): {wemFilesByLanguage["English(US)"].Count}");
+            Console.WriteLine($"WEM files in Francais: {wemFilesByLanguage["Francais"].Count}");
+
+            foreach (var language in wemFilesByLanguage.Keys)
+            {
+                foreach (var (fileId, filePath) in wemFilesByLanguage[language])
+                {
+                    try
+                    {
+                        if (provider.Files.TryGetValue(filePath, out var fileEntry))
+                        {
+                            string displayName = fileId;
+
+                            if (soundMap.TryGetValue(fileId, out var shortName))
+                            {
+                                displayName = shortName;
+                            }
+
+                            long fileSize = fileEntry.Size;
+                            string formattedSize = FormatFileSize(fileSize);
+
+                            var soundItem = new SoundItem
+                            {
+                                DisplayName = displayName,
+                                FilePath = filePath,
+                                Language = language,
+                                Size = fileSize,
+                                FormattedSize = formattedSize
+                            };
+
+                            foreach (var langPair in allSubtitles)
+                            {
+                                if (langPair.Value.TryGetValue(soundItem.DisplayName, out var subText))
+                                    soundItem.Subtitles[langPair.Key] = subText;
+                            }
+
+                            string uniqueKey = $"{fileId}_{language}";
+
+                            if (!uniqueSounds.ContainsKey(uniqueKey))
+                            {
+                                uniqueSounds[uniqueKey] = soundItem;
+                                foundFiles++;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error processing {filePath}: {ex.Message}");
                     }
                 }
             }
@@ -789,7 +908,18 @@ namespace Tigris
             soundItems.Clear();
             soundItems.AddRange(uniqueSounds.Values);
             soundsLoaded = true;
-            Console.WriteLine($"Loaded {soundItems.Count} sounds with sizes and subtitles");
+
+            Console.WriteLine($"=== Summary ===");
+            Console.WriteLine($"Total sounds loaded: {soundItems.Count}");
+
+            var langGroups = soundItems.GroupBy(s => s.Language)
+                .Select(g => new { Language = g.Key, Count = g.Count() })
+                .OrderByDescending(g => g.Count);
+
+            foreach (var group in langGroups)
+            {
+                Console.WriteLine($"  {group.Language}: {group.Count} sounds");
+            }
         }
         internal string FormatFileSize(long bytes)
         {
@@ -812,103 +942,170 @@ namespace Tigris
                 return gb % 1 == 0 ? $"{gb:F0} GB" : $"{gb:F1} GB";
             }
         }
-        internal static void ParseJsonForSoundNames(string jsonContent, Dictionary<string, string> soundMap, Dictionary<string, string> languageMap)
+        internal static void ParseJsonForSoundNames(string jsonContent, Dictionary<string, string> soundMap,
+    Dictionary<string, string> languageMap, string defaultLanguage = "Unknown")
         {
             try
             {
+                Console.WriteLine($"Parsing JSON, length: {jsonContent.Length}");
+
                 using var jsonDoc = JsonDocument.Parse(jsonContent);
                 var root = jsonDoc.RootElement;
-                string defaultLanguage = "Unknown";
 
-                if (root.TryGetProperty("SoundBanksInfo", out var soundBanksInfo) &&
-                    soundBanksInfo.TryGetProperty("SoundBanks", out var soundBanks))
+                if (root.TryGetProperty("SoundBanksInfo", out var soundBanksInfo))
                 {
-                    foreach (var soundBank in soundBanks.EnumerateArray())
-                    {
-                        if (soundBank.TryGetProperty("Language", out var languageElement))
-                            defaultLanguage = languageElement.GetString() ?? "Unknown";
-                        break;
-                    }
+                    Console.WriteLine("Found SoundBanksInfo");
 
-                    foreach (var soundBank in soundBanks.EnumerateArray())
+                    if (soundBanksInfo.TryGetProperty("SoundBanks", out var soundBanks))
                     {
-                        if (soundBank.TryGetProperty("IncludedEvents", out var includedEvents))
+                        Console.WriteLine($"Found {soundBanks.GetArrayLength()} sound banks");
+                        int totalMediaFiles = 0;
+
+                        foreach (var soundBank in soundBanks.EnumerateArray())
                         {
-                            foreach (var soundEvent in includedEvents.EnumerateArray())
+                            string bankLanguage = defaultLanguage;
+
+                            if (soundBank.TryGetProperty("Language", out var languageElement))
                             {
-                                string eventId = soundEvent.GetProperty("Id").GetString() ?? "";
-                                string eventName = soundEvent.GetProperty("Name").GetString() ?? "";
-
-                                if (!string.IsNullOrEmpty(eventId) && !string.IsNullOrEmpty(eventName))
+                                string lang = languageElement.GetString();
+                                if (!string.IsNullOrEmpty(lang))
                                 {
-                                    soundMap[eventId] = eventName;
-                                    languageMap[eventId] = defaultLanguage;
+                                    bankLanguage = lang;
+                                    Console.WriteLine($"Bank language: {bankLanguage}");
                                 }
+                            }
 
-                                if (soundEvent.TryGetProperty("ExcludedMemoryFiles", out var excludedFiles))
+                            if (soundBank.TryGetProperty("Media", out var mediaArray))
+                            {
+                                int mediaCount = mediaArray.GetArrayLength();
+                                Console.WriteLine($"Found 'Media' array with {mediaCount} entries");
+
+                                int parsedCount = ParseMediaArray(mediaArray, soundMap, languageMap, bankLanguage);
+                                totalMediaFiles += parsedCount;
+                                Console.WriteLine($"  Parsed {parsedCount} media files from this bank");
+                            }
+                            else
+                            {
+                                Console.WriteLine("No 'Media' array found in this bank");
+                                string[] possibleArrays = { "MediaFiles", "IncludedMemoryFiles", "ExcludedMemoryFiles", "Files" };
+                                foreach (var propName in possibleArrays)
                                 {
-                                    foreach (var excludedFile in excludedFiles.EnumerateArray())
+                                    if (soundBank.TryGetProperty(propName, out var altArray))
                                     {
-                                        string fileId = excludedFile.GetProperty("Id").GetString() ?? "";
-                                        string shortName = excludedFile.GetProperty("ShortName").GetString() ?? "";
-                                        string fileLanguage = excludedFile.TryGetProperty("Language", out var langElem) ? langElem.GetString() ?? defaultLanguage : defaultLanguage;
-
-                                        if (!string.IsNullOrEmpty(fileId) && !string.IsNullOrEmpty(shortName))
-                                        {
-                                            soundMap[fileId] = shortName.Replace(".wav", "");
-                                            languageMap[fileId] = fileLanguage;
-                                        }
+                                        Console.WriteLine($"Found '{propName}' array with {altArray.GetArrayLength()} entries");
+                                        int parsedCount = ParseMediaArray(altArray, soundMap, languageMap, bankLanguage);
+                                        totalMediaFiles += parsedCount;
                                     }
                                 }
                             }
                         }
+
+                        Console.WriteLine($"Total media files parsed from JSON: {totalMediaFiles}");
                     }
+                    else
+                    {
+                        Console.WriteLine("No 'SoundBanks' property in SoundBanksInfo");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("No SoundBanksInfo property found in JSON");
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error parsing JSON: {ex.Message}");
+                if (jsonContent.Length > 200)
+                {
+                    Console.WriteLine($"First 200 str: {jsonContent.Substring(0, 200)}...");
+                }
             }
         }
-        internal Dictionary<string, Dictionary<string, string>> LoadAllSubtitles()
+
+        private static int ParseMediaArray(JsonElement mediaArray, Dictionary<string, string> soundMap,
+            Dictionary<string, string> languageMap, string defaultLanguage)
         {
-            var allSubtitles = new Dictionary<string, Dictionary<string, string>>();
-            var exeDir = AppContext.BaseDirectory;
-            var locBase = Path.Combine(exeDir, "LOC");
+            int parsedCount = 0;
+            int displayedCount = 0;
 
-            if (!Directory.Exists(locBase))
-                return allSubtitles;
-
-            foreach (var jsonFile in Directory.GetFiles(locBase, "*.json", SearchOption.AllDirectories))
+            foreach (var mediaItem in mediaArray.EnumerateArray())
             {
                 try
                 {
-                    string langFolder = new DirectoryInfo(Path.GetDirectoryName(jsonFile)).Name;
-                    if (!allSubtitles.ContainsKey(langFolder))
-                        allSubtitles[langFolder] = new Dictionary<string, string>();
+                    string fileId = "";
+                    string shortName = "";
+                    string language = defaultLanguage;
 
-                    //          string json = File.ReadAllText(jsonFile);
-                    string json = File.ReadAllText(jsonFile, Encoding.UTF8);
-                    var jo = JObject.Parse(json);
-
-                    if (jo.TryGetValue("Subtitles", out var subObj) && subObj is JObject subDict)
+                    if (mediaItem.TryGetProperty("Id", out var idElement))
                     {
-                        foreach (var prop in subDict.Properties())
+                        if (idElement.ValueKind == JsonValueKind.String)
+                            fileId = idElement.GetString() ?? "";
+                        else if (idElement.ValueKind == JsonValueKind.Number)
+                            fileId = idElement.GetInt64().ToString();
+                    }
+
+                    if (mediaItem.TryGetProperty("ShortName", out var nameElement))
+                        shortName = nameElement.GetString() ?? "";
+
+                    if (mediaItem.TryGetProperty("Language", out var langElement))
+                    {
+                        string lang = langElement.GetString();
+                        if (!string.IsNullOrEmpty(lang))
+                            language = lang;
+                    }
+
+                    if (!string.IsNullOrEmpty(fileId) && !string.IsNullOrEmpty(shortName))
+                    {
+                        string cleanName = shortName;
+                        if (cleanName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+                            cleanName = cleanName.Substring(0, cleanName.Length - 4);
+
+                        if (cleanName.EndsWith(".wem", StringComparison.OrdinalIgnoreCase))
+                            cleanName = cleanName.Substring(0, cleanName.Length - 4);
+
+                        if (!soundMap.ContainsKey(fileId))
                         {
-                            string key = prop.Name;
-                            string value = prop.Value.ToString();
-                            if (!allSubtitles[langFolder].ContainsKey(key))
-                                allSubtitles[langFolder][key] = value;
+                            soundMap[fileId] = cleanName;
+                            languageMap[fileId] = language;
+                            parsedCount++;
+
+
+                            if (displayedCount < 5)
+                            {
+                                Console.WriteLine($"  Media: {fileId} -> {cleanName} ({language})");
+                                displayedCount++;
+                            }
+                        }
+                        else
+                        {
+                            if (language != "Unknown" && languageMap[fileId] == "Unknown")
+                            {
+                                soundMap[fileId] = cleanName;
+                                languageMap[fileId] = language;
+                                Console.WriteLine($"  Updated: {fileId} -> {cleanName} ({language})");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (displayedCount < 3)
+                        {
+                            Console.WriteLine($"  Skipping media item - missing Id or ShortName");
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error reading {jsonFile}: {ex.Message}");
+                    Console.WriteLine($"Error parsing media item: {ex.Message}");
                 }
             }
 
-            return allSubtitles;
+            if (parsedCount > 5)
+            {
+                Console.WriteLine($"  ... and {parsedCount - 5} more media files");
+            }
+
+            return parsedCount;
         }
         internal void InitLocres()
         {
@@ -1173,7 +1370,8 @@ namespace Tigris
                 {
                     OodleHelper.DownloadOodleDll();
                 }
-                OodleHelper.Initialize(@"oo2core_9_win64.dll");
+                OodleHelper.Initialize(@"utils\oo2core_9_win64.dll");
+            //    OodleHelper.Initialize(@"oo2core_9_win64.dll");
 
                 Console.WriteLine("Provider auto-initialized successfully with Paks path");
 
@@ -1273,8 +1471,32 @@ namespace Tigris
                 }
             }
 
-            Program.AddConversionLog($"---- Conversion finished ----");
-            Program.AddConversionLog($"Converted: {convertedCount}, Skipped: {skippedCount}, Total WAVs: {wavFiles.Length}");
+        }
+        
+        private string GetBaseFileName(string fileName)
+        {
+            int lastUnderscoreIndex = fileName.LastIndexOf('_');
+            if (lastUnderscoreIndex > 0 && lastUnderscoreIndex < fileName.Length - 1)
+            {
+                string potentialGuid = fileName.Substring(lastUnderscoreIndex + 1);
+
+                if (potentialGuid.Length == 8 && IsHexString(potentialGuid))
+                {
+                    return fileName.Substring(0, lastUnderscoreIndex);
+                }
+            }
+            return fileName;
+        }
+        private bool IsHexString(string input)
+        {
+            foreach (char c in input)
+            {
+                if (!Uri.IsHexDigit(c))
+                {
+                    return false;
+                }
+            }
+            return true;
         }
         internal void ProcessWemFolderToReplace(string wemFolderPath, bool matchById = false, bool matchByName = true, bool adjustSizes = true)
         {
@@ -1283,6 +1505,7 @@ namespace Tigris
                 Program.AddConversionLog("WEM folder not found or path is invalid");
                 return;
             }
+
             Program.AddConversionLog($"Language filter: {converterLanguage}");
             var wemFiles = Directory.GetFiles(wemFolderPath, "*.wem");
             if (wemFiles.Length == 0)
@@ -1302,7 +1525,6 @@ namespace Tigris
             int adjustedCount = 0;
             int skippedCount = 0;
             int errorCount = 0;
-
 
             var filesById = new Dictionary<string, string>();
             var filesByName = new Dictionary<string, string>();
@@ -1331,7 +1553,6 @@ namespace Tigris
 
             try
             {
-                //   foreach (var sound in soundItems)
                 foreach (var sound in GetConverterSounds())
                 {
                     try
@@ -1358,15 +1579,10 @@ namespace Tigris
                         else
                         {
                             skippedCount++;
-                        //    Program.AddConversionLog($"Skipped: {soundName} - no matching WEM file found");
-                            Program.AddConversionLog(
-    $"Skipped: {FormatSoundLog(sound)} - no matching WEM file found"
-);
-
+                            Program.AddConversionLog($"Skipped: {FormatSoundLog(sound)} - no matching WEM file found");
                             continue;
                         }
 
-                    //    Program.AddConversionLog($"Found by {foundBy} -> {Path.GetFileName(sourceWemFile)}");
                         Program.AddConversionLog($"Found by ID: {FormatSoundLog(sound)}");
 
                         string tempFile = Path.Combine(tempProcessingFolder, Path.GetFileName(sourceWemFile));
@@ -1397,24 +1613,19 @@ namespace Tigris
                             }
                         }
 
-                        string targetPath = Path.Combine(_replaceDirectory, sound.FilePath);
+                        string relativePath = ExtractMediaRelativePath(sound.FilePath);
+                        string targetPath = Path.Combine(_replaceDirectory, "OPP/Content/WwiseAudio/Windows/Media/", relativePath);
                         string targetDirectory = Path.GetDirectoryName(targetPath);
 
                         Directory.CreateDirectory(targetDirectory);
 
-
                         File.Copy(tempFile, targetPath, true);
 
-                 //       Program.AddConversionLog($"Copied: {Path.GetFileName(sourceWemFile)} -> {Path.GetFileName(sound.FilePath)}");
-                        Program.AddConversionLog(
-    $"Copied: {Path.GetFileName(sourceWemFile)} -> {FormatSoundLog(sound)}"
-);
-
+                        Program.AddConversionLog($"Copied: {Path.GetFileName(sourceWemFile)} -> {relativePath}");
                         copiedCount++;
                         processedCount++;
 
                         File.Delete(tempFile);
-
                     }
                     catch (Exception ex)
                     {
@@ -1435,7 +1646,6 @@ namespace Tigris
                 catch { }
             }
 
-            Program.AddConversionLog($"---- Processing completed ----");
             Program.AddConversionLog($"Processed: {processedCount}");
             Program.AddConversionLog($"Copied: {copiedCount}");
             if (adjustSizes)
@@ -1445,54 +1655,31 @@ namespace Tigris
             Program.AddConversionLog($"Skipped: {skippedCount}");
             Program.AddConversionLog($"Errors: {errorCount}");
         }
-        private string GetBaseFileName(string fileName)
+        private string ExtractMediaRelativePath(string fullPath)
         {
-            int lastUnderscoreIndex = fileName.LastIndexOf('_');
-            if (lastUnderscoreIndex > 0 && lastUnderscoreIndex < fileName.Length - 1)
+            string[] parts = fullPath.Split('/');
+            for (int i = 0; i < parts.Length; i++)
             {
-                string potentialGuid = fileName.Substring(lastUnderscoreIndex + 1);
-
-                if (potentialGuid.Length == 8 && IsHexString(potentialGuid))
+                if (parts[i].Equals("Media", StringComparison.OrdinalIgnoreCase) && i + 1 < parts.Length)
                 {
-                    return fileName.Substring(0, lastUnderscoreIndex);
+                    return string.Join("/", parts.Skip(i + 1));
                 }
             }
-            return fileName;
-        }
-        private bool IsHexString(string input)
-        {
-            foreach (char c in input)
-            {
-                if (!Uri.IsHexDigit(c))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-        internal void ProcessWemFolderToReplaceThenAdjust(string wemFolderPath, bool matchById = true, bool matchByName = false)
-        {
-            if (string.IsNullOrEmpty(wemFolderPath) || !Directory.Exists(wemFolderPath))
-            {
-                Program.AddConversionLog("WEM folder not found or path is invalid");
-                return;
-            }
 
-
-            ProcessWemFolderToReplace(wemFolderPath, matchById, matchByName, false);
-
-            Program.AddConversionLog("Adjusting sizes in replace folder...");
-            AdjustWemSizesInReplaceFolder(matchById, matchByName);
+            return Path.GetFileName(fullPath);
         }
         internal void AdjustWemSizesInReplaceFolder(bool matchById = true, bool matchByName = false)
         {
-            if (!Directory.Exists(_replaceDirectory))
+            string replaceMediaPath = Path.Combine(_replaceDirectory, "OPP/Content/WwiseAudio/Media");
+
+            if (!Directory.Exists(replaceMediaPath))
             {
                 Program.AddConversionLog("Replace directory not found");
                 return;
             }
+
             Program.AddConversionLog($"Language filter: {converterLanguage}");
-            var wemFiles = Directory.GetFiles(_replaceDirectory, "*.wem", SearchOption.AllDirectories);
+            var wemFiles = Directory.GetFiles(replaceMediaPath, "*.wem", SearchOption.AllDirectories);
             if (wemFiles.Length == 0)
             {
                 Program.AddConversionLog("No WEM files found in replace directory");
@@ -1502,7 +1689,6 @@ namespace Tigris
             int adjustedCount = 0;
             int skippedCount = 0;
             int errorCount = 0;
-
 
             var filesById = new Dictionary<string, string>();
             var filesByName = new Dictionary<string, string>();
@@ -1526,7 +1712,6 @@ namespace Tigris
                 filesByBaseName[baseFileName] = wemFile;
             }
 
-            //   foreach (var sound in soundItems)
             foreach (var sound in GetConverterSounds())
             {
                 try
@@ -1539,9 +1724,7 @@ namespace Tigris
 
                     if (matchById && filesById.TryGetValue(soundId, out wemFileToAdjust))
                     {
-                      //  Program.AddConversionLog($"Found by ID: {soundId}");
                         Program.AddConversionLog($"Found by ID: {FormatSoundLog(sound)}");
-
                     }
                     else if (matchByName && filesByName.TryGetValue(soundName, out wemFileToAdjust))
                     {
@@ -1581,21 +1764,12 @@ namespace Tigris
                         fileStream.Write(zeroBytes, 0, zeroBytes.Length);
                     }
 
-                    //  Program.AddConversionLog($"Adjusted: {Path.GetFileName(wemFileToAdjust)} from {currentSize} to {targetSize} bytes (+{bytesToAdd} bytes)");
-                    Program.AddConversionLog(
-    $"Adjusted: {FormatSoundLog(sound)} from {currentSize} to {targetSize} bytes"
-);
-
+                    Program.AddConversionLog($"Adjusted: {FormatSoundLog(sound)} from {currentSize} to {targetSize} bytes");
                     adjustedCount++;
-
                 }
                 catch (Exception ex)
                 {
-                 //   Program.AddConversionLog($"Error adjusting file for {sound.DisplayName}: {ex.Message}");
-                    Program.AddConversionLog(
-    $"Error adjusting file for {FormatSoundLog(sound)}: {ex.Message}"
-);
-
+                    Program.AddConversionLog($"Error adjusting file for {FormatSoundLog(sound)}: {ex.Message}");
                     errorCount++;
                 }
             }
